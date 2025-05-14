@@ -1,0 +1,122 @@
+#include <iostream>
+#include <cuda_runtime.h>
+#include <iomanip>
+
+
+__global__
+void matMulRowKernel(float* M, float* N, float* P, int n1, int n2) {
+    int row = threadIdx.x + blockDim.x * blockIdx.x;
+    int col = threadIdx.y + blockDim.y * blockIdx.y;
+
+    for(int k=0; k<Width; ++k){
+        int val = 0;
+        for(int l=0; l<n1; ++l){
+            val += M[row*n1 + l] *  N[k+l*n2];
+        }
+        P[row*Width + col] = val;
+    }
+}
+
+__global__
+void matMulColKernel(float* M, float* N, float* P, int n1, int n2) {
+    int row = threadIdx.x + blockDim.x * blockIdx.x;
+    int col = threadIdx.y + blockDim.y * blockIdx.y;
+
+    for(int k=0; k<Width; ++k){
+        int val = 0;
+        for(int l=0; l<Width; ++l){
+            val += M[k*n1 + l] *N[col+l*n2];
+        }
+        P[row*Width + col] = val;
+    }
+}
+
+void matMulRow(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n2) {
+
+    float *M_d;
+    cudaMalloc((void**)&M_d, m1*n1);
+    float *N_d;
+    cudaMalloc((void**)&N_d, m2*n2);
+    float *Pr_d;
+    cudaMalloc((void**)&P_d, m1*n2);
+
+    cudaMemcpy(M_d, M_h, m1*n1, cudaMemcpyHostToDevice);
+    cudaMemcpy(N_d, N_h, m2*n2, cudaMemcpyHostToDevice);
+
+    int blockHeight = 2;
+
+    dim3 dimBlockRow = (ceil(m1/blockHeight), 1, 1);
+    dim3 dimThreadRow = (blockHeight, 1, 1);
+    matMulRowKernel<<<dimBlockRow, dimThreadRow>>>(A_d, B_d, Pr_d, n1, n2);
+    cudaMemcpy(P_h, Pr_d, size, cudaMemcpyDeviceToHost);
+    cudaFree(Pr_d);
+
+    cudaFree(M_d);
+    cudaFree(N_d);
+
+}
+
+void matMulCol(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n2) {
+
+    float *M_d;
+    cudaMalloc((void**)&M_d, m1*n1);
+    float *N_d;
+    cudaMalloc((void**)&N_d, m2*n2);
+    float *Pc_d;
+    cudaMalloc((void**)&P_d, m1*n2);
+
+    cudaMemcpy(M_d, M_h, m1*n1, cudaMemcpyHostToDevice);
+    cudaMemcpy(N_d, N_h, m2*n2, cudaMemcpyHostToDevice);
+
+    int blockWidth = 2;
+    dim3 dimBlockCol = (1, ceil(n2/blockWidth), 1);;
+    dim3 dimThreadCol = (1, blockWidth, 1);
+    matMulColKernel<<<dimBlockCol, dimThreadCol>>>(A_d, B_d, Pc_d, n1, n2);
+    cudaMemcpy(P_h, Pc_d, m1*n2, cudaMemcpyDeviceToHost);
+    cudaFree(Pc_d);
+    
+    cudaFree(M_d);
+    cudaFree(N_d);
+
+}
+
+int main() {
+    // Matrix dimensions
+    int m1 = 2, n1 = 3;
+    int m2 = 3, n2 = 2;
+
+    if (n1 != m2) {
+        fprintf(stderr, "Matrix dimensions are incompatible for multiplication\n");
+        return 1;
+    }
+
+    // Allocate and initialize M_h (2x3)
+    float M_h[6] = {
+        1, 2, 3,
+        4, 5, 6
+    };
+
+    // Allocate and initialize N_h (3x2)
+    float N_h[6] = {
+        7, 8,
+        9, 10,
+        11, 12
+    };
+
+    // Allocate result matrix P_h (2x2)
+    float P_h[4] = {0};
+
+    // Call matMul function
+    matMulRow(M_h, N_h, P_h, m1, n1, m2, n2);
+
+    // Print result
+    printf("Result matrix P (2x2):\n");
+    for (int i = 0; i < m1; i++) {
+        for (int j = 0; j < n2; j++) {
+            printf("%f ", P_h[i * n2 + j]);
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
