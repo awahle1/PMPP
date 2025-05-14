@@ -4,30 +4,30 @@
 
 
 __global__
-void matMulRowKernel(float* M, float* N, float* P, int n1, int n2) {
+void matMulRowKernel(float* M, float* N, float* P, int m1, int n1, int m2, int n2) {
     int row = threadIdx.x + blockDim.x * blockIdx.x;
     int col = threadIdx.y + blockDim.y * blockIdx.y;
 
-    for(int k=0; k<Width; ++k){
+    for(int k=0; k<n2; ++k){
         int val = 0;
         for(int l=0; l<n1; ++l){
             val += M[row*n1 + l] *  N[k+l*n2];
         }
-        P[row*Width + col] = val;
+        P[row*n1 + col] = val;
     }
 }
 
 __global__
-void matMulColKernel(float* M, float* N, float* P, int n1, int n2) {
+void matMulColKernel(float* M, float* N, float* P, int m1, int n1, int m2, int n2) {
     int row = threadIdx.x + blockDim.x * blockIdx.x;
     int col = threadIdx.y + blockDim.y * blockIdx.y;
 
-    for(int k=0; k<Width; ++k){
+    for(int k=0; k<m1; ++k){
         int val = 0;
-        for(int l=0; l<Width; ++l){
+        for(int l=0; l<m2; ++l){
             val += M[k*n1 + l] *N[col+l*n2];
         }
-        P[row*Width + col] = val;
+        P[row*n1 + col] = val;
     }
 }
 
@@ -38,17 +38,17 @@ void matMulRow(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n
     float *N_d;
     cudaMalloc((void**)&N_d, m2*n2);
     float *Pr_d;
-    cudaMalloc((void**)&P_d, m1*n2);
+    cudaMalloc((void**)&Pr_d, m1*n2);
 
     cudaMemcpy(M_d, M_h, m1*n1, cudaMemcpyHostToDevice);
     cudaMemcpy(N_d, N_h, m2*n2, cudaMemcpyHostToDevice);
 
     int blockHeight = 2;
 
-    dim3 dimBlockRow = (ceil(m1/blockHeight), 1, 1);
-    dim3 dimThreadRow = (blockHeight, 1, 1);
-    matMulRowKernel<<<dimBlockRow, dimThreadRow>>>(A_d, B_d, Pr_d, n1, n2);
-    cudaMemcpy(P_h, Pr_d, size, cudaMemcpyDeviceToHost);
+    dim3 dimBlockRow(ceil(m1/blockHeight), 1, 1);
+    dim3 dimThreadRow(blockHeight, 1, 1);
+    matMulRowKernel<<<dimBlockRow, dimThreadRow>>>(M_d, N_d, Pr_d, m1, n1, m2, n2);
+    cudaMemcpy(P_h, Pr_d, m1*n2, cudaMemcpyDeviceToHost);
     cudaFree(Pr_d);
 
     cudaFree(M_d);
@@ -63,15 +63,15 @@ void matMulCol(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n
     float *N_d;
     cudaMalloc((void**)&N_d, m2*n2);
     float *Pc_d;
-    cudaMalloc((void**)&P_d, m1*n2);
+    cudaMalloc((void**)&Pc_d, m1*n2);
 
     cudaMemcpy(M_d, M_h, m1*n1, cudaMemcpyHostToDevice);
     cudaMemcpy(N_d, N_h, m2*n2, cudaMemcpyHostToDevice);
 
     int blockWidth = 2;
-    dim3 dimBlockCol = (1, ceil(n2/blockWidth), 1);;
-    dim3 dimThreadCol = (1, blockWidth, 1);
-    matMulColKernel<<<dimBlockCol, dimThreadCol>>>(A_d, B_d, Pc_d, n1, n2);
+    dim3 dimBlockCol(1, ceil(n2/blockWidth), 1);;
+    dim3 dimThreadCol(1, blockWidth, 1);
+    matMulColKernel<<<dimBlockCol, dimThreadCol>>>(M_d, N_d, Pc_d, m1, n1, m2, n2);
     cudaMemcpy(P_h, Pc_d, m1*n2, cudaMemcpyDeviceToHost);
     cudaFree(Pc_d);
     
