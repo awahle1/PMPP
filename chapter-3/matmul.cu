@@ -6,14 +6,13 @@
 __global__
 void matMulRowKernel(float* M, float* N, float* P, int m1, int n1, int m2, int n2) {
     int row = threadIdx.x + blockDim.x * blockIdx.x;
-    int col = threadIdx.y + blockDim.y * blockIdx.y;
 
     for(int k=0; k<n2; ++k){
         int val = 0;
         for(int l=0; l<n1; ++l){
             val += M[row*n1 + l] *  N[k+l*n2];
         }
-        P[row*n1 + col] = val;
+        P[row*n2 + k] = val;
     }
 }
 
@@ -34,21 +33,25 @@ void matMulColKernel(float* M, float* N, float* P, int m1, int n1, int m2, int n
 void matMulRow(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n2) {
 
     float *M_d;
-    cudaMalloc((void**)&M_d, m1*n1);
+    cudaMalloc((void**)&M_d, (m1*n1)*sizeof(float));
     float *N_d;
-    cudaMalloc((void**)&N_d, m2*n2);
+    cudaMalloc((void**)&N_d, (m2*n2)*sizeof(float));
     float *Pr_d;
-    cudaMalloc((void**)&Pr_d, m1*n2);
+    cudaMalloc((void**)&Pr_d, (m1*n2)*sizeof(float));
 
-    cudaMemcpy(M_d, M_h, m1*n1, cudaMemcpyHostToDevice);
-    cudaMemcpy(N_d, N_h, m2*n2, cudaMemcpyHostToDevice);
+    cudaMemcpy(M_d, M_h, (m1*n1)*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(N_d, N_h, (m2*n2)*sizeof(float), cudaMemcpyHostToDevice);
 
     int blockHeight = 2;
 
-    dim3 dimBlockRow(ceil(m1/blockHeight), 1, 1);
-    dim3 dimThreadRow(blockHeight, 1, 1);
-    matMulRowKernel<<<dimBlockRow, dimThreadRow>>>(M_d, N_d, Pr_d, m1, n1, m2, n2);
-    cudaMemcpy(P_h, Pr_d, m1*n2, cudaMemcpyDeviceToHost);
+    dim3 dimBlock(ceil(m1/blockHeight), 1, 1);
+    dim3 dimThread(blockHeight, 1, 1);
+
+    printf("dimBlock: x=%u, y=%u, z=%u\n", dimBlock.x, dimBlock.y, dimBlock.z);
+    printf("dimThread: x=%u, y=%u, z=%u\n", dimThread.x, dimThread.y, dimThread.z);
+
+    matMulRowKernel<<<dimBlock, dimThread>>>(M_d, N_d, Pr_d, m1, n1, m2, n2);
+    cudaMemcpy(P_h, Pr_d, (m1*n2)*sizeof(float), cudaMemcpyDeviceToHost);
     cudaFree(Pr_d);
 
     cudaFree(M_d);
@@ -71,6 +74,7 @@ void matMulCol(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n
     int blockWidth = 2;
     dim3 dimBlockCol(1, ceil(n2/blockWidth), 1);;
     dim3 dimThreadCol(1, blockWidth, 1);
+
     matMulColKernel<<<dimBlockCol, dimThreadCol>>>(M_d, N_d, Pc_d, m1, n1, m2, n2);
     cudaMemcpy(P_h, Pc_d, m1*n2, cudaMemcpyDeviceToHost);
     cudaFree(Pc_d);
