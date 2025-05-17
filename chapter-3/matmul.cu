@@ -18,7 +18,6 @@ void matMulRowKernel(float* M, float* N, float* P, int m1, int n1, int m2, int n
 
 __global__
 void matMulColKernel(float* M, float* N, float* P, int m1, int n1, int m2, int n2) {
-    int row = threadIdx.x + blockDim.x * blockIdx.x;
     int col = threadIdx.y + blockDim.y * blockIdx.y;
 
     for(int k=0; k<m1; ++k){
@@ -26,7 +25,7 @@ void matMulColKernel(float* M, float* N, float* P, int m1, int n1, int m2, int n
         for(int l=0; l<m2; ++l){
             val += M[k*n1 + l] *N[col+l*n2];
         }
-        P[row*n1 + col] = val;
+        P[k*n2 + col] = val;
     }
 }
 
@@ -62,21 +61,21 @@ void matMulRow(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n
 void matMulCol(float* M_h, float* N_h, float* P_h, int m1, int n1, int m2, int n2) {
 
     float *M_d;
-    cudaMalloc((void**)&M_d, m1*n1);
+    cudaMalloc((void**)&M_d, (m1*n1)*sizeof(float));
     float *N_d;
-    cudaMalloc((void**)&N_d, m2*n2);
+    cudaMalloc((void**)&N_d, (m2*n2)*sizeof(float));
     float *Pc_d;
-    cudaMalloc((void**)&Pc_d, m1*n2);
+    cudaMalloc((void**)&Pc_d, (m1*n2)*sizeof(float));
 
-    cudaMemcpy(M_d, M_h, m1*n1, cudaMemcpyHostToDevice);
-    cudaMemcpy(N_d, N_h, m2*n2, cudaMemcpyHostToDevice);
+    cudaMemcpy(M_d, M_h, (m1*n1)*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(N_d, N_h, (m2*n2)*sizeof(float), cudaMemcpyHostToDevice);
 
     int blockWidth = 2;
-    dim3 dimBlockCol(1, ceil(n2/blockWidth), 1);;
-    dim3 dimThreadCol(1, blockWidth, 1);
+    dim3 dimBlock(1, ceil(n2/blockWidth), 1);;
+    dim3 dimThread(1, blockWidth, 1);
 
-    matMulColKernel<<<dimBlockCol, dimThreadCol>>>(M_d, N_d, Pc_d, m1, n1, m2, n2);
-    cudaMemcpy(P_h, Pc_d, m1*n2, cudaMemcpyDeviceToHost);
+    matMulColKernel<<<dimBlock, dimThread>>>(M_d, N_d, Pc_d, m1, n1, m2, n2);
+    cudaMemcpy(P_h, Pc_d, (m1*n2)*sizeof(float), cudaMemcpyDeviceToHost);
     cudaFree(Pc_d);
     
     cudaFree(M_d);
@@ -111,7 +110,7 @@ int main() {
     float P_h[4] = {0};
 
     // Call matMul function
-    matMulRow(M_h, N_h, P_h, m1, n1, m2, n2);
+    matMulCol(M_h, N_h, P_h, m1, n1, m2, n2);
 
     // Print result
     printf("Result matrix P (2x2):\n");
